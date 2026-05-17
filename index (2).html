@@ -1,0 +1,891 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <title>Halal Check SG</title>
+  <script src="https://unpkg.com/react@18/umd/react.development.js"></script>
+  <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Space+Grotesk:wght@600;700&display=swap" rel="stylesheet" />
+  <style>
+    :root {
+      --emerald: #059669;
+      --emerald-dark: #047857;
+      --emerald-light: #d1fae5;
+      --amber-warn: #d97706;
+      --red-exp: #dc2626;
+      --slate-bg: #f1f5f9;
+      --card-bg: #ffffff;
+      --text-main: #0f172a;
+      --text-sub: #64748b;
+      --border: #e2e8f0;
+    }
+    * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+    html, body, #root { height: 100%; margin: 0; padding: 0; }
+    body {
+      font-family: 'DM Sans', sans-serif;
+      background: var(--slate-bg);
+      overscroll-behavior: none;
+    }
+    .app-shell {
+      max-width: 430px;
+      margin: 0 auto;
+      height: 100dvh;
+      display: flex;
+      flex-direction: column;
+      background: var(--slate-bg);
+      position: relative;
+      overflow: hidden;
+    }
+    .sticky-top {
+      position: sticky;
+      top: 0;
+      z-index: 50;
+    }
+    .header-gradient {
+      background: linear-gradient(135deg, #065f46 0%, #059669 60%, #10b981 100%);
+      padding: env(safe-area-inset-top, 0px) 0 0;
+    }
+    .header-inner {
+      padding: 16px 16px 12px;
+    }
+    .header-brand {
+      font-family: 'Space Grotesk', sans-serif;
+      font-size: 22px;
+      font-weight: 700;
+      color: #ffffff;
+      letter-spacing: -0.5px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .header-sub {
+      font-size: 11px;
+      color: #a7f3d0;
+      margin-top: 2px;
+      letter-spacing: 0.3px;
+    }
+    .halal-badge {
+      display: inline-flex;
+      align-items: center;
+      background: rgba(255,255,255,0.15);
+      border: 1px solid rgba(255,255,255,0.25);
+      border-radius: 20px;
+      padding: 2px 10px 2px 6px;
+      font-size: 11px;
+      font-weight: 600;
+      color: #ffffff;
+      gap: 4px;
+      backdrop-filter: blur(4px);
+    }
+    .search-bar-wrap {
+      background: linear-gradient(180deg, #059669 0%, #047857 100%);
+      padding: 0 12px 12px;
+    }
+    .search-input-row {
+      display: flex;
+      align-items: center;
+      background: #ffffff;
+      border-radius: 14px;
+      padding: 0 12px;
+      height: 46px;
+      gap: 8px;
+      box-shadow: 0 4px 20px rgba(0,0,0,0.12);
+    }
+    .search-input-row input {
+      flex: 1;
+      border: none;
+      outline: none;
+      font-family: 'DM Sans', sans-serif;
+      font-size: 15px;
+      color: var(--text-main);
+      background: transparent;
+    }
+    .search-input-row input::placeholder { color: #94a3b8; }
+    .clear-btn {
+      background: #e2e8f0;
+      border: none;
+      border-radius: 50%;
+      width: 22px;
+      height: 22px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      transition: background 0.15s;
+      flex-shrink: 0;
+    }
+    .clear-btn:hover { background: #cbd5e1; }
+    .pills-wrap {
+      background: #047857;
+      padding: 0 12px 14px;
+      overflow-x: auto;
+      scrollbar-width: none;
+    }
+    .pills-wrap::-webkit-scrollbar { display: none; }
+    .pills-row {
+      display: flex;
+      gap: 8px;
+      width: max-content;
+    }
+    .pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      padding: 6px 14px;
+      border-radius: 20px;
+      font-size: 13px;
+      font-weight: 500;
+      cursor: pointer;
+      transition: all 0.15s;
+      white-space: nowrap;
+      border: 1.5px solid rgba(255,255,255,0.3);
+      color: rgba(255,255,255,0.9);
+      background: rgba(255,255,255,0.12);
+      user-select: none;
+    }
+    .pill:active { transform: scale(0.96); }
+    .pill.active {
+      background: #ffffff;
+      color: var(--emerald-dark);
+      border-color: #ffffff;
+      font-weight: 600;
+    }
+    .scroll-body {
+      flex: 1;
+      overflow-y: auto;
+      overflow-x: hidden;
+      -webkit-overflow-scrolling: touch;
+      padding: 12px 12px 24px;
+      scrollbar-width: none;
+    }
+    .scroll-body::-webkit-scrollbar { display: none; }
+    .result-card {
+      background: var(--card-bg);
+      border-radius: 16px;
+      padding: 16px;
+      margin-bottom: 10px;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.06), 0 2px 8px rgba(0,0,0,0.04);
+      border: 1px solid var(--border);
+      transition: transform 0.1s, box-shadow 0.1s;
+      animation: fadeUp 0.25s ease both;
+    }
+    .result-card:active { transform: scale(0.99); }
+    @keyframes fadeUp {
+      from { opacity: 0; transform: translateY(10px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+    .card-name {
+      font-family: 'Space Grotesk', sans-serif;
+      font-size: 16px;
+      font-weight: 700;
+      color: var(--text-main);
+      line-height: 1.25;
+      margin-bottom: 4px;
+    }
+    .status-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      font-size: 11px;
+      font-weight: 600;
+      padding: 3px 9px;
+      border-radius: 20px;
+      text-transform: uppercase;
+      letter-spacing: 0.4px;
+    }
+    .status-valid {
+      background: var(--emerald-light);
+      color: var(--emerald-dark);
+    }
+    .status-expired {
+      background: #fee2e2;
+      color: var(--red-exp);
+    }
+    .status-expiring {
+      background: #fef3c7;
+      color: var(--amber-warn);
+    }
+    .card-divider {
+      height: 1px;
+      background: var(--border);
+      margin: 10px 0;
+    }
+    .card-addr-row {
+      display: flex;
+      align-items: flex-start;
+      gap: 8px;
+    }
+    .addr-text {
+      font-size: 13px;
+      color: var(--text-sub);
+      line-height: 1.5;
+      flex: 1;
+    }
+    .copy-btn {
+      flex-shrink: 0;
+      background: #f1f5f9;
+      border: none;
+      border-radius: 8px;
+      padding: 5px 8px;
+      cursor: pointer;
+      font-size: 11px;
+      font-weight: 600;
+      color: var(--text-sub);
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      transition: all 0.15s;
+    }
+    .copy-btn:hover { background: var(--emerald-light); color: var(--emerald-dark); }
+    .copy-btn.copied { background: var(--emerald-light); color: var(--emerald-dark); }
+    .meta-row {
+      display: flex;
+      gap: 8px;
+      margin-top: 10px;
+      flex-wrap: wrap;
+    }
+    .meta-chip {
+      display: flex;
+      flex-direction: column;
+      background: #f8fafc;
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 6px 10px;
+      flex: 1;
+      min-width: 120px;
+    }
+    .meta-label {
+      font-size: 10px;
+      font-weight: 600;
+      color: #94a3b8;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      margin-bottom: 2px;
+    }
+    .meta-value {
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--text-main);
+    }
+    .meta-value.warn { color: var(--amber-warn); }
+    .meta-value.danger { color: var(--red-exp); }
+    /* Skeleton */
+    .skeleton-card {
+      background: var(--card-bg);
+      border-radius: 16px;
+      padding: 16px;
+      margin-bottom: 10px;
+      border: 1px solid var(--border);
+      overflow: hidden;
+    }
+    .skel {
+      background: linear-gradient(90deg, #e2e8f0 25%, #f1f5f9 50%, #e2e8f0 75%);
+      background-size: 200% 100%;
+      animation: shimmer 1.4s infinite;
+      border-radius: 6px;
+    }
+    @keyframes shimmer {
+      0% { background-position: 200% 0; }
+      100% { background-position: -200% 0; }
+    }
+    .skel-title { height: 18px; width: 65%; margin-bottom: 10px; }
+    .skel-badge { height: 20px; width: 80px; border-radius: 20px; margin-bottom: 12px; }
+    .skel-line { height: 12px; margin-bottom: 6px; }
+    .skel-line.w80 { width: 80%; }
+    .skel-line.w60 { width: 60%; }
+    .skel-meta { height: 46px; flex: 1; border-radius: 10px; }
+
+    /* Empty / Error banners */
+    .info-banner {
+      background: var(--card-bg);
+      border-radius: 16px;
+      padding: 28px 20px;
+      text-align: center;
+      border: 1px solid var(--border);
+      margin-top: 12px;
+    }
+    .info-banner .emoji { font-size: 40px; margin-bottom: 12px; }
+    .info-banner h3 {
+      font-family: 'Space Grotesk', sans-serif;
+      font-size: 17px;
+      font-weight: 700;
+      color: var(--text-main);
+      margin: 0 0 6px;
+    }
+    .info-banner p { font-size: 13px; color: var(--text-sub); margin: 0 0 16px; line-height: 1.5; }
+    .retry-btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      background: var(--emerald);
+      color: #fff;
+      border: none;
+      border-radius: 12px;
+      padding: 10px 22px;
+      font-family: 'DM Sans', sans-serif;
+      font-size: 14px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: background 0.15s, transform 0.1s;
+    }
+    .retry-btn:hover { background: var(--emerald-dark); }
+    .retry-btn:active { transform: scale(0.97); }
+    .results-count {
+      font-size: 12px;
+      font-weight: 600;
+      color: var(--text-sub);
+      padding: 2px 0 8px;
+      letter-spacing: 0.2px;
+    }
+    .welcome-banner {
+      background: linear-gradient(135deg, #ecfdf5 0%, #f0fdf4 100%);
+      border: 1px solid #a7f3d0;
+      border-radius: 16px;
+      padding: 20px;
+      text-align: center;
+      margin-top: 4px;
+    }
+    .welcome-banner .icon { font-size: 36px; margin-bottom: 10px; }
+    .welcome-banner h3 {
+      font-family: 'Space Grotesk', sans-serif;
+      font-size: 16px;
+      font-weight: 700;
+      color: var(--emerald-dark);
+      margin: 0 0 6px;
+    }
+    .welcome-banner p { font-size: 13px; color: #065f46; margin: 0; line-height: 1.6; }
+    .muis-link {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 5px;
+      font-size: 11px;
+      color: #94a3b8;
+      padding: 10px 0 4px;
+    }
+    .muis-link a { color: var(--emerald); text-decoration: none; font-weight: 600; }
+    .dot-pulse {
+      width: 7px; height: 7px; border-radius: 50%;
+      background: #a7f3d0;
+      display: inline-block;
+      animation: pulse 1.4s ease-in-out infinite;
+    }
+    @keyframes pulse {
+      0%,100% { opacity: 1; transform: scale(1); }
+      50% { opacity: 0.4; transform: scale(0.8); }
+    }
+    .toast {
+      position: fixed;
+      bottom: 30px;
+      left: 50%;
+      transform: translateX(-50%) translateY(20px);
+      background: #0f172a;
+      color: #fff;
+      font-size: 13px;
+      font-weight: 500;
+      padding: 10px 18px;
+      border-radius: 20px;
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 0.2s, transform 0.2s;
+      z-index: 999;
+      white-space: nowrap;
+    }
+    .toast.show {
+      opacity: 1;
+      transform: translateX(-50%) translateY(0);
+    }
+  </style>
+</head>
+<body>
+<div id="root"></div>
+
+<script type="text/babel">
+const { useState, useEffect, useRef, useCallback } = React;
+
+// ─── MUIS LIVE FETCHER ENGINE ────────────────────────────────────────────────
+
+async function fetchMuisData(searchQuery) {
+  if (!searchQuery || searchQuery.trim().length < 2) return [];
+
+  const trimmed = searchQuery.trim();
+
+  // MUIS interactive search endpoint
+  const targetUrl = `https://www.muis.gov.sg/Halal/Halal-Certificate-Sembelihan-Certificates/Certification-Directory?searchText=${encodeURIComponent(trimmed)}&searchType=restaurant`;
+  const proxyUrl = `https://api.allorigins.win/get?url=${encodeURIComponent(targetUrl)}`;
+
+  const resp = await fetch(proxyUrl, { signal: AbortSignal.timeout(12000) });
+  if (!resp.ok) throw new Error(`Proxy returned ${resp.status}`);
+
+  const json = await resp.json();
+  const html = json.contents || "";
+
+  if (!html) throw new Error("Empty response from proxy");
+
+  // Parse HTML via DOMParser
+  const parser = new DOMParser();
+  const doc = parser.parseFromString(html, "text/html");
+
+  const results = [];
+
+  // Try table rows first (MUIS uses a results table)
+  const rows = doc.querySelectorAll("table tbody tr, .cert-result-row, .search-result-item, tr[data-id]");
+
+  if (rows.length > 0) {
+    rows.forEach((row) => {
+      const cells = row.querySelectorAll("td");
+      if (cells.length >= 3) {
+        const name = cells[0]?.textContent?.trim() || "";
+        const address = cells[1]?.textContent?.trim() || "";
+        const certNo = cells[2]?.textContent?.trim() || "";
+        const expiryDate = cells[3]?.textContent?.trim() || cells[4]?.textContent?.trim() || "";
+        const statusText = cells[4]?.textContent?.trim() || cells[5]?.textContent?.trim() || "Active";
+        if (name) {
+          results.push(classifyResult({ name, address, certNo, expiryDate, status: statusText }));
+        }
+      }
+    });
+  }
+
+  // Fallback: try card/div-based layout
+  if (results.length === 0) {
+    const cards = doc.querySelectorAll(".certification-item, .halal-cert-item, .result-card, [class*='cert-item'], [class*='halal-item']");
+    cards.forEach((card) => {
+      const name = card.querySelector("h3, h4, .name, .cert-name, strong")?.textContent?.trim() || "";
+      const address = card.querySelector(".address, .addr, [class*='address']")?.textContent?.trim() || "";
+      const certNo = card.querySelector(".cert-no, .certno, [class*='cert-no'], [class*='certNo']")?.textContent?.trim() || "";
+      const expiryDate = card.querySelector(".expiry, [class*='expiry'], [class*='expire']")?.textContent?.trim() || "";
+      const statusText = card.querySelector(".status, [class*='status']")?.textContent?.trim() || "Active";
+      if (name) {
+        results.push(classifyResult({ name, address, certNo, expiryDate, status: statusText }));
+      }
+    });
+  }
+
+  // Deep fallback: scrape any structured text from the page
+  if (results.length === 0) {
+    // Try to extract JSON data embedded in script tags
+    const scripts = doc.querySelectorAll("script");
+    let jsonData = null;
+    scripts.forEach((s) => {
+      const txt = s.textContent || "";
+      const match = txt.match(/var\s+(?:certResults|searchResults|halalData)\s*=\s*(\[[\s\S]*?\]);/);
+      if (match) {
+        try { jsonData = JSON.parse(match[1]); } catch (_) {}
+      }
+      // Also try window.__data patterns
+      const match2 = txt.match(/window\.__(?:DATA|data|HALAL|results)\s*=\s*(\{[\s\S]*?\});/);
+      if (match2) {
+        try {
+          const d = JSON.parse(match2[1]);
+          if (d.results || d.data) jsonData = d.results || d.data;
+        } catch (_) {}
+      }
+    });
+
+    if (jsonData && Array.isArray(jsonData)) {
+      jsonData.forEach((item) => {
+        const name = item.name || item.Name || item.businessName || item.FoodEstName || "";
+        const address = item.address || item.Address || item.premiseAddress || item.Premise || "";
+        const certNo = item.certNo || item.CertNo || item.certificateNo || item.CertificateNumber || "";
+        const expiryDate = item.expiryDate || item.ExpiryDate || item.expiry || item.ValidTill || "";
+        const statusText = item.status || item.Status || "Active";
+        if (name) {
+          results.push(classifyResult({ name, address, certNo, expiryDate, status: statusText }));
+        }
+      });
+    }
+  }
+
+  // Last-resort: if MUIS returns a "no results" page, detect it
+  const pageText = doc.body?.textContent || "";
+  if (results.length === 0 && (
+    pageText.toLowerCase().includes("no result") ||
+    pageText.toLowerCase().includes("no record") ||
+    pageText.toLowerCase().includes("not found")
+  )) {
+    return [];
+  }
+
+  // If page loaded but we couldn't parse anything structured, return sentinel
+  if (results.length === 0 && html.length > 500) {
+    // Try a broader text extraction as a last effort
+    const allTdText = Array.from(doc.querySelectorAll("td")).map(t => t.textContent.trim()).filter(Boolean);
+    if (allTdText.length > 5) {
+      // Chunk into groups of 5 columns
+      for (let i = 0; i + 2 < allTdText.length; i += 5) {
+        const name = allTdText[i] || "";
+        const address = allTdText[i+1] || "";
+        const certNo = allTdText[i+2] || "";
+        const expiryDate = allTdText[i+3] || "";
+        const status = allTdText[i+4] || "Active";
+        if (name && name.length > 3 && name.length < 120) {
+          results.push(classifyResult({ name, address, certNo, expiryDate, status }));
+        }
+      }
+    }
+  }
+
+  return results;
+}
+
+function classifyResult({ name, address, certNo, expiryDate, status }) {
+  let certStatus = "valid";
+  const rawStatus = (status || "").toLowerCase();
+
+  if (rawStatus.includes("expir") || rawStatus.includes("invalid") || rawStatus.includes("cancel")) {
+    certStatus = "expired";
+  } else if (expiryDate) {
+    // Check if expiring within 60 days
+    const parts = expiryDate.match(/(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{2,4})/);
+    if (parts) {
+      const [, d, m, y] = parts;
+      const fullYear = y.length === 2 ? "20" + y : y;
+      const expDate = new Date(`${fullYear}-${m.padStart(2,"0")}-${d.padStart(2,"0")}`);
+      const now = new Date();
+      const diffDays = (expDate - now) / (1000 * 60 * 60 * 24);
+      if (diffDays < 0) certStatus = "expired";
+      else if (diffDays < 60) certStatus = "expiring";
+    }
+  }
+
+  return {
+    id: Math.random().toString(36).slice(2),
+    name: name.replace(/\s+/g, " ").trim(),
+    address: address.replace(/\s+/g, " ").trim(),
+    certNo: certNo.replace(/\s+/g, " ").trim(),
+    expiryDate: expiryDate.trim(),
+    certStatus,
+  };
+}
+
+// ─── QUICK FILTER PILLS ──────────────────────────────────────────────────────
+const QUICK_PILLS = [
+  { label: "McDonald's", icon: "🍟" },
+  { label: "Subway", icon: "🥖" },
+  { label: "KFC", icon: "🍗" },
+  { label: "Encik Tan", icon: "🍜" },
+  { label: "Stuff'd", icon: "🌯" },
+  { label: "Marrybrown", icon: "🍔" },
+  { label: "Old Chang Kee", icon: "🥟" },
+  { label: "Bengawan Solo", icon: "🍰" },
+];
+
+// ─── SKELETON LOADER ─────────────────────────────────────────────────────────
+function SkeletonCard() {
+  return (
+    <div className="skeleton-card">
+      <div className="skel skel-title" />
+      <div className="skel skel-badge" />
+      <div style={{height:1, background:"var(--border)", margin:"10px 0"}} />
+      <div className="skel skel-line w80" />
+      <div className="skel skel-line w60" />
+      <div style={{display:"flex", gap:8, marginTop:10}}>
+        <div className="skel skel-meta" />
+        <div className="skel skel-meta" />
+      </div>
+    </div>
+  );
+}
+
+// ─── RESULT CARD ─────────────────────────────────────────────────────────────
+function ResultCard({ item, onCopy }) {
+  const [copied, setCopied] = useState(false);
+
+  const handleCopy = () => {
+    const text = `${item.name}\n${item.address}`;
+    navigator.clipboard?.writeText(text).catch(() => {});
+    setCopied(true);
+    onCopy?.();
+    setTimeout(() => setCopied(false), 2000);
+  };
+
+  const statusConfig = {
+    valid: { label: "✓ Certified", cls: "status-valid" },
+    expiring: { label: "⚠ Expiring Soon", cls: "status-expiring" },
+    expired: { label: "✕ Expired", cls: "status-expired" },
+  };
+  const sc = statusConfig[item.certStatus] || statusConfig.valid;
+
+  const expiryClass = item.certStatus === "expired" ? "danger" : item.certStatus === "expiring" ? "warn" : "";
+
+  return (
+    <div className="result-card">
+      <div style={{display:"flex", justifyContent:"space-between", alignItems:"flex-start", gap:8}}>
+        <div className="card-name">{item.name || "—"}</div>
+        <span className={`status-badge ${sc.cls}`} style={{flexShrink:0}}>{sc.label}</span>
+      </div>
+
+      <div className="card-divider" />
+
+      <div className="card-addr-row">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{color:"#94a3b8",marginTop:2,flexShrink:0}}>
+          <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/>
+          <circle cx="12" cy="10" r="3"/>
+        </svg>
+        <span className="addr-text">{item.address || "Address not available"}</span>
+        {item.address && (
+          <button className={`copy-btn ${copied ? "copied" : ""}`} onClick={handleCopy}>
+            {copied ? (
+              <><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><polyline points="20 6 9 17 4 12"/></svg> Copied</>
+            ) : (
+              <><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg> Copy</>
+            )}
+          </button>
+        )}
+      </div>
+
+      <div className="meta-row">
+        <div className="meta-chip">
+          <span className="meta-label">Cert No.</span>
+          <span className="meta-value">{item.certNo || "—"}</span>
+        </div>
+        <div className="meta-chip">
+          <span className="meta-label">Expiry</span>
+          <span className={`meta-value ${expiryClass}`}>{item.expiryDate || "—"}</span>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── TOAST ───────────────────────────────────────────────────────────────────
+function Toast({ message, show }) {
+  return <div className={`toast ${show ? "show" : ""}`}>{message}</div>;
+}
+
+// ─── MAIN APP ────────────────────────────────────────────────────────────────
+function App() {
+  const [query, setQuery] = useState("");
+  const [results, setResults] = useState([]);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState(null);
+  const [hasSearched, setHasSearched] = useState(false);
+  const [activeFilter, setActiveFilter] = useState(null);
+  const [toast, setToast] = useState({ show: false, msg: "" });
+  const inputRef = useRef(null);
+  const debounceRef = useRef(null);
+  const abortRef = useRef(null);
+
+  const showToast = (msg) => {
+    setToast({ show: true, msg });
+    setTimeout(() => setToast({ show: false, msg: "" }), 1800);
+  };
+
+  const runSearch = useCallback(async (searchTerm) => {
+    if (!searchTerm || searchTerm.trim().length < 2) {
+      setResults([]);
+      setHasSearched(false);
+      setError(null);
+      return;
+    }
+    setLoading(true);
+    setError(null);
+    setHasSearched(true);
+    try {
+      const data = await fetchMuisData(searchTerm);
+      setResults(data);
+    } catch (e) {
+      console.error(e);
+      setError(e.message || "Network error");
+      setResults([]);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  const handleInputChange = (e) => {
+    const val = e.target.value;
+    setQuery(val);
+    setActiveFilter(null);
+    clearTimeout(debounceRef.current);
+    debounceRef.current = setTimeout(() => runSearch(val), 600);
+  };
+
+  const handlePillClick = (label) => {
+    if (activeFilter === label) {
+      setActiveFilter(null);
+      setQuery("");
+      setResults([]);
+      setHasSearched(false);
+      return;
+    }
+    setActiveFilter(label);
+    setQuery(label);
+    runSearch(label);
+    inputRef.current?.blur();
+  };
+
+  const handleClear = () => {
+    setQuery("");
+    setResults([]);
+    setHasSearched(false);
+    setError(null);
+    setActiveFilter(null);
+    clearTimeout(debounceRef.current);
+    inputRef.current?.focus();
+  };
+
+  const handleRetry = () => {
+    if (query.trim()) runSearch(query);
+  };
+
+  return (
+    <div className="app-shell">
+      {/* STICKY HEADER */}
+      <div className="sticky-top">
+        <div className="header-gradient">
+          <div className="header-inner">
+            <div style={{display:"flex", justifyContent:"space-between", alignItems:"center"}}>
+              <div>
+                <div className="header-brand">
+                  <span>🕌</span>
+                  <span>Halal Check SG</span>
+                </div>
+                <div className="header-sub">Powered by MUIS Official Registry</div>
+              </div>
+              <div className="halal-badge">
+                <span className="dot-pulse" />
+                Live Data
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* SEARCH BAR */}
+        <div className="search-bar-wrap">
+          <div className="search-input-row">
+            <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="#94a3b8" strokeWidth="2.2">
+              <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
+            </svg>
+            <input
+              ref={inputRef}
+              type="text"
+              placeholder="Search eatery, stall, or chain…"
+              value={query}
+              onChange={handleInputChange}
+              autoComplete="off"
+              autoCapitalize="words"
+            />
+            {query.length > 0 && (
+              <button className="clear-btn" onClick={handleClear} aria-label="Clear search">
+                <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="#64748b" strokeWidth="2.5">
+                  <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+                </svg>
+              </button>
+            )}
+          </div>
+        </div>
+
+        {/* FILTER PILLS */}
+        <div className="pills-wrap">
+          <div className="pills-row">
+            {QUICK_PILLS.map((p) => (
+              <button
+                key={p.label}
+                className={`pill ${activeFilter === p.label ? "active" : ""}`}
+                onClick={() => handlePillClick(p.label)}
+              >
+                <span>{p.icon}</span>
+                <span>{p.label}</span>
+              </button>
+            ))}
+          </div>
+        </div>
+      </div>
+
+      {/* SCROLLABLE BODY */}
+      <div className="scroll-body">
+
+        {/* LOADING SKELETONS */}
+        {loading && (
+          <>
+            <div className="results-count">Searching MUIS registry…</div>
+            {[1,2,3].map(i => <SkeletonCard key={i} />)}
+          </>
+        )}
+
+        {/* ERROR BANNER */}
+        {!loading && error && (
+          <div className="info-banner">
+            <div className="emoji">📡</div>
+            <h3>Connection Issue</h3>
+            <p>Couldn't reach the MUIS registry right now. This may be a temporary network issue with the proxy or the MUIS server.</p>
+            <button className="retry-btn" onClick={handleRetry}>
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                <polyline points="23 4 23 10 17 10"/>
+                <path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/>
+              </svg>
+              Retry Search
+            </button>
+            <p style={{fontSize:11, color:"#cbd5e1", marginTop:12, marginBottom:0}}>Error: {error}</p>
+          </div>
+        )}
+
+        {/* NO RESULTS */}
+        {!loading && !error && hasSearched && results.length === 0 && (
+          <div className="info-banner">
+            <div className="emoji">🔍</div>
+            <h3>No Results Found</h3>
+            <p>No Halal-certified eateries matched "<strong>{query}</strong>" in the MUIS registry. Try a different keyword or check the spelling.</p>
+            <button className="retry-btn" onClick={() => { handleClear(); inputRef.current?.focus(); }}>
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+              </svg>
+              Clear & Try Again
+            </button>
+          </div>
+        )}
+
+        {/* RESULTS FEED */}
+        {!loading && !error && results.length > 0 && (
+          <>
+            <div className="results-count">
+              {results.length} result{results.length !== 1 ? "s" : ""} found
+            </div>
+            {results.map((item, idx) => (
+              <ResultCard
+                key={item.id || idx}
+                item={item}
+                onCopy={() => showToast("📋 Address copied!")}
+              />
+            ))}
+            <div className="muis-link">
+              <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+              Data source: <a href="https://www.muis.gov.sg/Halal" target="_blank" rel="noopener noreferrer">MUIS Official Registry</a>
+            </div>
+          </>
+        )}
+
+        {/* WELCOME STATE */}
+        {!loading && !error && !hasSearched && (
+          <div className="welcome-banner">
+            <div className="icon">🕌</div>
+            <h3>Verify Halal Status Instantly</h3>
+            <p>Search any restaurant, hawker stall, or food chain to check their MUIS Halal certification status, validity, and certificate details in real-time.</p>
+            <div style={{marginTop:14, display:"flex", flexWrap:"wrap", gap:6, justifyContent:"center"}}>
+              {["Hawker Centre", "Shopping Mall", "Fast Food"].map(tag => (
+                <span key={tag} style={{
+                  background:"#d1fae5", color:"#065f46",
+                  fontSize:11, fontWeight:600, padding:"4px 10px",
+                  borderRadius:20
+                }}>{tag}</span>
+              ))}
+            </div>
+          </div>
+        )}
+      </div>
+
+      <Toast message={toast.msg} show={toast.show} />
+    </div>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById("root")).render(<App />);
+</script>
+</body>
+</html>
