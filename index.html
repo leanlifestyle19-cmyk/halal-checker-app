@@ -408,129 +408,134 @@
 const { useState, useEffect, useRef, useCallback } = React;
 
 // ─── MUIS LIVE FETCHER ENGINE ────────────────────────────────────────────────
+// Uses the MUIS public search API (JSON) with a multi-proxy fallback chain.
+// Proxy chain: corsproxy.io → allorigins → codetabs → direct (last resort)
 
+const PROXY_CHAIN = [
+  (url) => `https://corsproxy.io/?${encodeURIComponent(url)}`,
+  (url) => `https://api.allorigins.win/get?url=${encodeURIComponent(url)}`,
+  (url) => `https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(url)}`,
+];
+
+async function proxyFetch(targetUrl, timeoutMs = 10000) {
+  let lastErr = null;
+  for (const buildProxy of PROXY_CHAIN) {
+    const proxyUrl = buildProxy(targetUrl);
+    try {
+      const resp = await fetch(proxyUrl, { signal: AbortSignal.timeout(timeoutMs) });
+      if (!resp.ok) { lastErr = new Error(`HTTP ${resp.status}`); continue; }
+      const ct = resp.headers.get("content-type") || "";
+      // allorigins wraps in {contents, status}; others return raw
+      if (proxyUrl.includes("allorigins")) {
+        const json = await resp.json();
+        return json.contents || "";
+      }
+      // codetabs and corsproxy return raw body
+      return await resp.text();
+    } catch (e) {
+      lastErr = e;
+    }
+  }
+  throw lastErr || new Error("All proxies failed");
+}
+
+// MUIS exposes a public REST search used by their directory page.
+// Endpoint: /api/HalalCertifiedEstablishment/Search
+// Returns JSON array directly — no HTML parsing needed.
 async function fetchMuisData(searchQuery) {
   if (!searchQuery || searchQuery.trim().length < 2) return [];
-
   const trimmed = searchQuery.trim();
 
-  // MUIS interactive search endpoint
-  const targetUrl = `https://www.muis.gov.sg/Halal/Halal-Certificate-Sembelihan-Certificates/Certification-Directory?searchText=${encodeURIComponent(trimmed)}&searchType=restaurant`;
-  const proxyUrl = `https://api.allorigins.win/get?url=${encodeURIComponent(targetUrl)}`;
+  // ── Strategy 1: MUIS public JSON API ──────────────────────────────────────
+  const apiUrl = `https://www.muis.gov.sg/api/HalalCertifiedEstablishment/Search?searchText=${encodeURIComponent(trimmed)}&pageSize=30&pageNumber=1`;
+  try {
+    const raw = await proxyFetch(apiUrl, 10000);
+    if (raw) {
+      // Strip BOM / leading whitespace
+      const clean = raw.replace(/^\uFEFF/, "").trim();
+      // corsproxy may return JSON directly
+      if (clean.startsWith("[") || clean.startsWith("{")) {
+        const parsed = JSON.parse(clean);
+        const arr = Array.isArray(parsed) ? parsed : (parsed.data || parsed.results || parsed.items || []);
+        if (arr.length > 0) {
+          return arr.map(item => classifyResult({
+            name:        item.EstablishmentName || item.name || item.Name || item.businessName || "",
+            address:     item.Address || item.address || item.premiseAddress || "",
+            certNo:      item.CertificateNo || item.certNo || item.CertNo || item.certificateNumber || "",
+            expiryDate:  formatApiDate(item.ExpiryDate || item.expiryDate || item.ValidTill || item.validTill || ""),
+            status:      item.Status || item.status || item.CertStatus || "Active",
+          })).filter(r => r.name);
+        }
+      }
+    }
+  } catch (_) { /* fall through to HTML strategy */ }
 
-  const resp = await fetch(proxyUrl, { signal: AbortSignal.timeout(12000) });
-  if (!resp.ok) throw new Error(`Proxy returned ${resp.status}`);
+  // ── Strategy 2: Scrape the HTML directory page ────────────────────────────
+  const pageUrl = `https://www.muis.gov.sg/Halal/Halal-Certificate-Sembelihan-Certificates/Certification-Directory?searchText=${encodeURIComponent(trimmed)}`;
+  const html = await proxyFetch(pageUrl, 12000);
+  if (!html) throw new Error("Empty response from all proxies");
 
-  const json = await resp.json();
-  const html = json.contents || "";
-
-  if (!html) throw new Error("Empty response from proxy");
-
-  // Parse HTML via DOMParser
   const parser = new DOMParser();
   const doc = parser.parseFromString(html, "text/html");
-
   const results = [];
 
-  // Try table rows first (MUIS uses a results table)
-  const rows = doc.querySelectorAll("table tbody tr, .cert-result-row, .search-result-item, tr[data-id]");
+  // 2a: Table rows
+  doc.querySelectorAll("table tbody tr").forEach(row => {
+    const cells = Array.from(row.querySelectorAll("td")).map(c => c.textContent.trim());
+    if (cells.length >= 3 && cells[0].length > 2) {
+      results.push(classifyResult({
+        name: cells[0], address: cells[1] || "", certNo: cells[2] || "",
+        expiryDate: cells[3] || "", status: cells[4] || "Active",
+      }));
+    }
+  });
 
-  if (rows.length > 0) {
-    rows.forEach((row) => {
-      const cells = row.querySelectorAll("td");
-      if (cells.length >= 3) {
-        const name = cells[0]?.textContent?.trim() || "";
-        const address = cells[1]?.textContent?.trim() || "";
-        const certNo = cells[2]?.textContent?.trim() || "";
-        const expiryDate = cells[3]?.textContent?.trim() || cells[4]?.textContent?.trim() || "";
-        const statusText = cells[4]?.textContent?.trim() || cells[5]?.textContent?.trim() || "Active";
-        if (name) {
-          results.push(classifyResult({ name, address, certNo, expiryDate, status: statusText }));
-        }
-      }
-    });
-  }
-
-  // Fallback: try card/div-based layout
+  // 2b: JSON embedded in <script> tags
   if (results.length === 0) {
-    const cards = doc.querySelectorAll(".certification-item, .halal-cert-item, .result-card, [class*='cert-item'], [class*='halal-item']");
-    cards.forEach((card) => {
-      const name = card.querySelector("h3, h4, .name, .cert-name, strong")?.textContent?.trim() || "";
-      const address = card.querySelector(".address, .addr, [class*='address']")?.textContent?.trim() || "";
-      const certNo = card.querySelector(".cert-no, .certno, [class*='cert-no'], [class*='certNo']")?.textContent?.trim() || "";
-      const expiryDate = card.querySelector(".expiry, [class*='expiry'], [class*='expire']")?.textContent?.trim() || "";
-      const statusText = card.querySelector(".status, [class*='status']")?.textContent?.trim() || "Active";
-      if (name) {
-        results.push(classifyResult({ name, address, certNo, expiryDate, status: statusText }));
-      }
-    });
-  }
-
-  // Deep fallback: scrape any structured text from the page
-  if (results.length === 0) {
-    // Try to extract JSON data embedded in script tags
-    const scripts = doc.querySelectorAll("script");
-    let jsonData = null;
-    scripts.forEach((s) => {
+    doc.querySelectorAll("script").forEach(s => {
       const txt = s.textContent || "";
-      const match = txt.match(/var\s+(?:certResults|searchResults|halalData)\s*=\s*(\[[\s\S]*?\]);/);
-      if (match) {
-        try { jsonData = JSON.parse(match[1]); } catch (_) {}
-      }
-      // Also try window.__data patterns
-      const match2 = txt.match(/window\.__(?:DATA|data|HALAL|results)\s*=\s*(\{[\s\S]*?\});/);
-      if (match2) {
-        try {
-          const d = JSON.parse(match2[1]);
-          if (d.results || d.data) jsonData = d.results || d.data;
-        } catch (_) {}
-      }
-    });
-
-    if (jsonData && Array.isArray(jsonData)) {
-      jsonData.forEach((item) => {
-        const name = item.name || item.Name || item.businessName || item.FoodEstName || "";
-        const address = item.address || item.Address || item.premiseAddress || item.Premise || "";
-        const certNo = item.certNo || item.CertNo || item.certificateNo || item.CertificateNumber || "";
-        const expiryDate = item.expiryDate || item.ExpiryDate || item.expiry || item.ValidTill || "";
-        const statusText = item.status || item.Status || "Active";
-        if (name) {
-          results.push(classifyResult({ name, address, certNo, expiryDate, status: statusText }));
+      [
+        /(?:var|let|const)\s+\w+\s*=\s*(\[[\s\S]{10,}?\]);/g,
+        /:\s*(\[[\s\S]{10,}?\])/g,
+      ].forEach(re => {
+        let m;
+        while ((m = re.exec(txt)) !== null && results.length === 0) {
+          try {
+            const arr = JSON.parse(m[1]);
+            if (!Array.isArray(arr) || arr.length === 0) return;
+            const first = arr[0];
+            if (typeof first !== "object") return;
+            arr.forEach(item => {
+              const name = item.EstablishmentName || item.name || item.Name || "";
+              if (!name) return;
+              results.push(classifyResult({
+                name, address: item.Address || item.address || "",
+                certNo: item.CertificateNo || item.certNo || "",
+                expiryDate: formatApiDate(item.ExpiryDate || item.expiryDate || ""),
+                status: item.Status || item.status || "Active",
+              }));
+            });
+          } catch (_) {}
         }
       });
-    }
+    });
   }
 
-  // Last-resort: if MUIS returns a "no results" page, detect it
-  const pageText = doc.body?.textContent || "";
+  // 2c: "no results" detection
+  const bodyText = (doc.body?.textContent || "").toLowerCase();
   if (results.length === 0 && (
-    pageText.toLowerCase().includes("no result") ||
-    pageText.toLowerCase().includes("no record") ||
-    pageText.toLowerCase().includes("not found")
-  )) {
-    return [];
-  }
-
-  // If page loaded but we couldn't parse anything structured, return sentinel
-  if (results.length === 0 && html.length > 500) {
-    // Try a broader text extraction as a last effort
-    const allTdText = Array.from(doc.querySelectorAll("td")).map(t => t.textContent.trim()).filter(Boolean);
-    if (allTdText.length > 5) {
-      // Chunk into groups of 5 columns
-      for (let i = 0; i + 2 < allTdText.length; i += 5) {
-        const name = allTdText[i] || "";
-        const address = allTdText[i+1] || "";
-        const certNo = allTdText[i+2] || "";
-        const expiryDate = allTdText[i+3] || "";
-        const status = allTdText[i+4] || "Active";
-        if (name && name.length > 3 && name.length < 120) {
-          results.push(classifyResult({ name, address, certNo, expiryDate, status }));
-        }
-      }
-    }
-  }
+    bodyText.includes("no result") || bodyText.includes("no record") || bodyText.includes("not found")
+  )) return [];
 
   return results;
+}
+
+function formatApiDate(raw) {
+  if (!raw) return "";
+  // ISO format: 2024-06-30T00:00:00 → 30/06/2024
+  const iso = raw.match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if (iso) return `${iso[3]}/${iso[2]}/${iso[1]}`;
+  return raw;
 }
 
 function classifyResult({ name, address, certNo, expiryDate, status }) {
@@ -813,8 +818,8 @@ function App() {
         {!loading && error && (
           <div className="info-banner">
             <div className="emoji">📡</div>
-            <h3>Connection Issue</h3>
-            <p>Couldn't reach the MUIS registry right now. This may be a temporary network issue with the proxy or the MUIS server.</p>
+            <h3>All Proxies Unreachable</h3>
+            <p>The app tried 3 CORS proxies (corsproxy.io → allorigins → codetabs) but all failed. This is usually temporary — please retry in a moment.</p>
             <button className="retry-btn" onClick={handleRetry}>
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
                 <polyline points="23 4 23 10 17 10"/>
@@ -822,7 +827,14 @@ function App() {
               </svg>
               Retry Search
             </button>
-            <p style={{fontSize:11, color:"#cbd5e1", marginTop:12, marginBottom:0}}>Error: {error}</p>
+            <div style={{marginTop:14, padding:"10px 12px", background:"#f8fafc", borderRadius:10, textAlign:"left"}}>
+              <p style={{fontSize:11, color:"#64748b", margin:"0 0 6px", fontWeight:600}}>Or search directly on MUIS:</p>
+              <a href={`https://www.muis.gov.sg/Halal/Halal-Certificate-Sembelihan-Certificates/Certification-Directory?searchText=${encodeURIComponent(query)}`} target="_blank" rel="noopener noreferrer" style={{fontSize:12, color:"var(--emerald)", fontWeight:600, textDecoration:"none", display:"flex", alignItems:"center", gap:5}}>
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
+                Open MUIS Registry →
+              </a>
+            </div>
+            <p style={{fontSize:10, color:"#cbd5e1", marginTop:10, marginBottom:0}}>Debug: {error}</p>
           </div>
         )}
 
